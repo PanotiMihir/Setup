@@ -1,0 +1,109 @@
+#!/bin/bash
+
+# Mouse theme - Moga Neon
+# Icons theme - symbolic dark icons
+
+set -e
+
+# Ask for sudo once at start
+sudo -v
+
+# Keep sudo alive while script runs
+while true; do sudo -n true; sleep 60; done 2>/dev/null &
+
+echo "Updating system..."
+sudo apt update
+
+echo "Installing base packages..."
+sudo apt install -y curl git wget zsh
+
+echo "Adding Brave repository..."
+sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
+https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+
+echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] \
+https://brave-browser-apt-release.s3.brave.com/ stable main" | \
+sudo tee /etc/apt/sources.list.d/brave-browser-release.list > /dev/null
+
+sudo apt update
+
+echo "Installing Brave..."
+sudo apt install -y brave-browser
+
+echo "Setting Zsh as default shell..."
+chsh -s $(which zsh)
+
+echo "Installing Oh My Zsh..."
+RUNZSH=no CHSH=no sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+
+echo "Setup complete. Restart your terminal."
+
+
+PROFILE=b1dcc9dd-5262-4d8d-a863-c897e6d979b9
+
+gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$PROFILE/ use-theme-colors false
+gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$PROFILE/ background-color '#000000'
+gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$PROFILE/ foreground-color '#A0A0A0'
+gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$PROFILE/ cursor-colors-set true
+gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$PROFILE/ cursor-foreground-color '#000000'
+gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$PROFILE/ cursor-background-color '#A0A0A0'
+
+sudo snap remove firefox
+
+# Clone repo (if not already cloned)
+if [ ! -d "scripts" ]; then
+  git clone https://github.com/PanotiMihir/scripts
+fi
+
+cd scripts || exit 1
+
+# Install scripts except README.md
+for file in *; do
+  if [ "$file" != "README.md" ] && [ -f "$file" ]; then
+    sudo install -m 755 "$file" /usr/local/bin/
+  fi
+done
+
+cd ..
+rm -rf scripts
+
+
+cd ~ && \
+mkdir -p Applications && \
+cd Applications && \
+FILE=$(curl -s https://api.github.com/repos/godotengine/godot/releases/latest \
+| grep browser_download_url \
+| grep "linux.x86_64.zip" \
+| grep -v mono \
+| head -n 1 \
+| cut -d '"' -f4) && \
+wget "$FILE" -O godot.zip && \
+unzip -o godot.zip && \
+rm godot.zip && \
+chmod +x Godot_*_linux.x86_64 && \
+sudo ln -sf "$PWD"/Godot_*_linux.x86_64 /usr/local/bin/godot && \
+cd ~
+
+
+cd ~ && \
+wget -O discord.tar.gz "https://discord.com/api/download?platform=linux&format=tar.gz" && \
+tar -xzf discord.tar.gz && \
+rm discord.tar.gz && \
+sudo rm -rf /opt/discord && \
+sudo mv Discord /opt/discord && \
+sudo chown -R root:root /opt/discord && \
+sudo chmod 4755 /opt/discord/chrome-sandbox && \
+sudo ln -sf /opt/discord/Discord /usr/local/bin/discord && \
+sudo tee /usr/share/applications/discord.desktop > /dev/null <<EOF
+[Desktop Entry]
+Name=Discord
+Comment=Chat for communities and friends
+Exec=/opt/discord/Discord
+Icon=/opt/discord/discord.png
+Terminal=false
+Type=Application
+Categories=Network;InstantMessaging;
+StartupWMClass=discord
+EOF
+sudo update-desktop-database && \
+cd ~

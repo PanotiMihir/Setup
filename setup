@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Mouse theme - Moga Neon
-# Icons theme - symbolic dark icons
 
 set -e
 
@@ -10,6 +9,10 @@ sudo -v
 
 # Keep sudo alive while script runs
 while true; do sudo -n true; sleep 60; done 2>/dev/null &
+
+echo "Creating the to-do file..."
+touch to-do.txt
+echo "Add the mouse theme." > to-do.txt
 
 echo "Updating system..."
 sudo apt update
@@ -107,3 +110,7 @@ StartupWMClass=discord
 EOF
 sudo update-desktop-database && \
 cd ~
+
+ssh-keygen -t ed25519 -C "panotmihir123@gmail.com"
+
+cat ~/.ssh/id_ed25519.pub > to-do.txt

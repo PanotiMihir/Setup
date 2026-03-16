@@ -1,289 +1,145 @@
-#!/bin/bash
-
-LOG="$HOME/setup.log"
-exec > >(tee -a "$LOG") 2>&1
-
-echo "========== UBUNTU KINGDOM SETUP STARTED =========="
-date
-
-set -euo pipefail
-
-# ----------------------------------------
-# 1. INIT
-# ----------------------------------------
-echo "== Initializing sudo keepalive =="
-
-sudo -v
-while true; do sudo -n true; sleep 60; done 2>/dev/null &
-SUDO_PID=$!
-
-# ----------------------------------------
-# 2. SYSTEM UPDATE + CORE PACKAGES
-# ----------------------------------------
-echo "== Updating system and installing core packages =="
-
-sudo apt update
-
-sudo apt install -y \
-  curl \
-  git \
-  wget \
-  zsh \
-  unzip \
-  software-properties-common \
-  apt-transport-https \
-  gpg \
-  ca-certificates \
-  lolcat \
-  cowsay \
-  neovim
-
-# ----------------------------------------
-# 3. REPOSITORY SETUP
-# ----------------------------------------
-echo "== Adding Brave repository =="
-
-sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
-https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
-
-echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] \
-https://brave-browser-apt-release.s3.brave.com/ stable main" | \
-sudo tee /etc/apt/sources.list.d/brave-browser-release.list > /dev/null
-
-echo "== Adding VS Code repository =="
-
-wget -qO- https://packages.microsoft.com/keys/microsoft.asc | \
-gpg --dearmor | \
-sudo tee /usr/share/keyrings/packages.microsoft.gpg > /dev/null
-
-echo "deb [arch=amd64 signed-by=/usr/share/keyrings/packages.microsoft.gpg] \
-https://packages.microsoft.com/repos/code stable main" | \
-sudo tee /etc/apt/sources.list.d/vscode.list > /dev/null
-
-sudo apt update
-
-# ----------------------------------------
-# 4. APPLICATION INSTALL PHASE (APT)
-# ----------------------------------------
-echo "== Installing applications via apt =="
-
-sudo apt install -y \
-  brave-browser \
-  code
-
-echo "== Removing Firefox snap =="
-sudo snap remove firefox || true
-
-# ----------------------------------------
-# 5. MANUAL INSTALLS (/opt)
-# ----------------------------------------
-
-echo "== Installing Godot to /opt/godot =="
-
-sudo mkdir -p /opt/godot
-cd /opt/godot
-
-GODOT_URL=$(curl -s https://api.github.com/repos/godotengine/godot/releases/latest \
-| grep browser_download_url \
-| grep "linux.x86_64.zip" \
-| grep -v mono \
-| head -n 1 \
-| cut -d '"' -f4)
-
-sudo wget "$GODOT_URL" -O godot.zip
-sudo unzip -o godot.zip
-sudo rm godot.zip
-sudo chmod +x Godot_*_linux.x86_64
-sudo ln -sf /opt/godot/Godot_*_linux.x86_64 /usr/local/bin/godot
-
-cd ~
-
-echo "== Installing Discord to /opt/discord =="
-
-wget -O discord.tar.gz "https://discord.com/api/download?platform=linux&format=tar.gz"
-tar -xzf discord.tar.gz
-rm discord.tar.gz
-
-sudo rm -rf /opt/discord
-sudo mv Discord /opt/discord
-sudo chown -R root:root /opt/discord
-sudo chmod 4755 /opt/discord/chrome-sandbox
-sudo ln -sf /opt/discord/Discord /usr/local/bin/discord
-
-sudo tee /usr/share/applications/discord.desktop > /dev/null <<EOF
-[Desktop Entry]
-Name=Discord
-Comment=Chat for communities and friends
-Exec=/opt/discord/Discord
-Icon=/opt/discord/discord.png
-Terminal=false
-Type=Application
-Categories=Network;InstantMessaging;
-StartupWMClass=discord
-EOF
-
-sudo update-desktop-database
-
-# ----------------------------------------
-# 6. SHELL SETUP (ZSH + OH MY ZSH + AUTOSUGGESTIONS)
-# ----------------------------------------
-echo "== Setting Zsh as default shell =="
-chsh -s "$(which zsh)" || true
-
-echo "== Installing Oh My Zsh =="
-RUNZSH=no CHSH=no sh -c \
-"$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-
-echo "== Installing Zsh Autosuggestions =="
-
-ZSH_CUSTOM=${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}
-
-git clone https://github.com/zsh-users/zsh-autosuggestions \
-$ZSH_CUSTOM/plugins/zsh-autosuggestions
-
-echo "plugins=(git zsh-autosuggestions)" >> "$HOME/.zshrc"
-
-# ----------------------------------------
-# 7. NVIM SETUP
-# ----------------------------------------
-echo "== Setting up Neovim =="
-
-mkdir -p ~/.config/nvim
-
-cat > ~/.config/nvim/init.lua << 'EOF'
--- Line numbers
-vim.opt.number = true
-vim.opt.relativenumber = true
-
--- Tabs & indentation
-vim.opt.tabstop = 4
-vim.opt.shiftwidth = 4
-vim.opt.expandtab = true
-
--- Better search
-vim.opt.ignorecase = true
-vim.opt.smartcase = true
-
--- Enable mouse
-vim.opt.mouse = "a"
-
--- Clipboard integration
-vim.opt.clipboard = "unnamedplus"
-
--- Smooth scrolling
-vim.opt.scrolloff = 8
-
--- True color support
-vim.opt.termguicolors = true
-
--- Dark theme
-vim.cmd("colorscheme default")
-EOF
-
-# ----------------------------------------
-# 8. GNOME TERMINAL THEME
-# ----------------------------------------
-echo "== Applying GNOME Terminal theme =="
-
-PROFILE=$(gsettings get org.gnome.Terminal.ProfilesList default | tr -d \')
-
-gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$PROFILE/ use-theme-colors false
-gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$PROFILE/ background-color '#000000'
-gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$PROFILE/ foreground-color '#A0A0A0'
-gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$PROFILE/ cursor-colors-set true
-gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$PROFILE/ cursor-foreground-color '#000000'
-gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$PROFILE/ cursor-background-color '#A0A0A0'
-
-# ----------------------------------------
-# 9. CUSTOM SCRIPTS INSTALL
-# ----------------------------------------
-echo "== Installing custom scripts =="
-
-git clone https://github.com/PanotiMihir/scripts
-cd scripts || exit 1
-
-for file in *; do
-  if [ "$file" != "README.md" ] && [ -f "$file" ]; then
-    sudo install -m 755 "$file" /usr/local/bin/
-  fi
-done
-
-cd ..
-rm -rf scripts
-
-# ----------------------------------------
-# 10. SSH KEY (NON-INTERACTIVE)
-# ----------------------------------------
-echo "== Generating SSH key =="
-
-mkdir -p "$HOME/.ssh"
-ssh-keygen -t ed25519 -C "panotmihir123@gmail.com" \
--f "$HOME/.ssh/id_ed25519" -N ""
-
-# ----------------------------------------
-# 11. VS CODE EXTENSIONS
-# ----------------------------------------
-echo "== Installing VS Code extensions =="
-
-code --install-extension openai.chatgpt || true
-code --install-extension geequlim.godot-tools || true
-
-# ----------------------------------------
-# 12. TO-DO FILE (MANUAL TASKS ONLY)
-# ----------------------------------------
-echo "== Creating to-do list =="
-
-cat <<EOF > "$HOME/to-do.txt"
-MANUAL TASKS:
-- Add SSH public key to GitHub/GitLab
-- Verify GNOME Terminal profile UUID matches
-- Log into Brave
-- Log into Discord
-- Verify Zsh is default shell after reboot
-EOF
-
-# ----------------------------------------
-# 13. CLEANUP
-# ----------------------------------------
-echo "== Cleaning up unused packages =="
-
-sudo apt autoremove -y
-
-kill $SUDO_PID
-
-# ----------------------------------------
-# 14. GRUB DRIP INSTALL (VIMIX CLEAN)
-# ----------------------------------------
-echo "== Installing GRUB Vimix theme and clean config =="
-
-cd ~
-
-# Clone theme
-git clone https://github.com/vinceliuice/grub2-themes.git
-cd grub2-themes || exit 1
-
-sudo ./install.sh -t vimix -s 2k
-
-cd ~
-rm -rf grub2-themes
-
-echo "== Applying clean GRUB settings =="
-
-sudo sed -i 's/^GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=menu/' /etc/default/grub
-sudo sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=30/' /etc/default/grub
-
-echo 'GRUB_DISABLE_RECOVERY=true' | sudo tee -a /etc/default/grub > /dev/null
-echo 'GRUB_DISABLE_SUBMENU=y' | sudo tee -a /etc/default/grub > /dev/null
-
-# Disable memtest
-sudo chmod -x /etc/grub.d/20_memtest86+ 2>/dev/null || true
-
-sudo update-grub
-
-echo "========== SETUP COMPLETE =========="
-date
-
-echo "System will power off in 10 seconds..."
-sleep 10
-
-sudo poweroff
+# MONITOR
+monitor=,preferred,auto,auto
+
+# PROGRAMS
+$terminal = kitty
+$fileManager = nautilus
+
+$mainMod = SUPER
+
+# CURSOR
+env = XCURSOR_SIZE,24
+env = HYPRCURSOR_SIZE,24
+
+# GENERAL
+general {
+    gaps_in = 6
+    gaps_out = 20
+    border_size = 2
+
+    col.active_border = rgba(ca7cffee) rgba(7f5af0ee) 45deg
+    col.inactive_border = rgba(444444aa)
+
+    layout = dwindle
+}
+
+# DECORATION
+decoration {
+    rounding = 10
+
+    active_opacity = 0.80
+    inactive_opacity = 0.30
+    fullscreen_opacity = 1.0
+
+    blur {
+        enabled = true
+        size = 6
+        passes = 2
+        vibrancy = 0.2
+    }
+
+    shadow {
+        enabled = true
+        range = 8
+        render_power = 3
+    }
+}
+
+# ANIMATIONS
+animations {
+    enabled = yes
+
+    bezier = smooth,0.25,0.1,0.25,1
+
+    animation = windows,1,4,smooth
+    animation = fade,1,4,smooth
+    animation = workspaces,1,4,smooth
+}
+
+# LAYOUT
+dwindle {
+    pseudotile = true
+    preserve_split = true
+}
+
+# INPUT
+input {
+    kb_layout = us
+    follow_mouse = 1
+    sensitivity = 0
+
+    touchpad {
+        natural_scroll = true
+    }
+}
+
+# KEYBINDS
+bind = $mainMod, Q, exec, $terminal
+bind = $mainMod, C, killactive
+bind = $mainMod, E, exec, $fileManager
+bind = $mainMod, V, togglefloating
+bind = $mainMod, SPACE, exec, ulauncher
+
+bind = $mainMod, P, pseudo
+bind = $mainMod, J, layoutmsg, togglesplit
+
+# WINDOW FOCUS
+bind = $mainMod, left, movefocus, l
+bind = $mainMod, right, movefocus, r
+bind = $mainMod, up, movefocus, u
+bind = $mainMod, down, movefocus, d
+
+# WORKSPACES
+bind = $mainMod, 1, workspace, 1
+bind = $mainMod, 2, workspace, 2
+bind = $mainMod, 3, workspace, 3
+bind = $mainMod, 4, workspace, 4
+bind = $mainMod, 5, workspace, 5
+bind = $mainMod, 6, workspace, 6
+bind = $mainMod, 7, workspace, 7
+bind = $mainMod, 8, workspace, 8
+bind = $mainMod, 9, workspace, 9
+bind = $mainMod, 0, workspace, 10
+
+bind = $mainMod SHIFT, 1, movetoworkspace, 1
+bind = $mainMod SHIFT, 2, movetoworkspace, 2
+bind = $mainMod SHIFT, 3, movetoworkspace, 3
+bind = $mainMod SHIFT, 4, movetoworkspace, 4
+bind = $mainMod SHIFT, 5, movetoworkspace, 5
+bind = $mainMod SHIFT, 6, movetoworkspace, 6
+bind = $mainMod SHIFT, 7, movetoworkspace, 7
+bind = $mainMod SHIFT, 8, movetoworkspace, 8
+bind = $mainMod SHIFT, 9, movetoworkspace, 9
+bind = $mainMod SHIFT, 0, movetoworkspace, 10
+
+# SPECIAL WORKSPACE
+bind = $mainMod, S, togglespecialworkspace, magic
+bind = $mainMod SHIFT, S, movetoworkspace, special:magic
+
+# MOUSE WINDOW CONTROL
+bindm = $mainMod, mouse:273, movewindow
+bindm = $mainMod, mouse:272, resizewindow
+
+# SCROLL WORKSPACES
+bind = $mainMod, mouse_down, workspace, e+1
+bind = $mainMod, mouse_up, workspace, e-1
+
+# SCREENSHOTS
+bind = , Print, exec, grim ~/Pictures/screenshot-$(date +%s).png
+bind = SHIFT, Print, exec, grim -g "$(slurp)" ~/Pictures/screenshot-$(date +%s).png
+
+# MEDIA KEYS
+bindel = ,XF86AudioRaiseVolume, exec, wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+
+bindel = ,XF86AudioLowerVolume, exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+bindel = ,XF86AudioMute, exec, wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+bindel = ,XF86AudioMicMute, exec, wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+
+# BRIGHTNESS
+bindel = ,XF86MonBrightnessUp, exec, brightnessctl set +5%
+bindel = ,XF86MonBrightnessDown, exec, brightnessctl set 5%-
+
+# MEDIA
+bindl = , XF86AudioNext, exec, playerctl next
+bindl = , XF86AudioPause, exec, playerctl play-pause
+bindl = , XF86AudioPlay, exec, playerctl play-pause
+bindl = , XF86AudioPrev, exec, playerctl previous
